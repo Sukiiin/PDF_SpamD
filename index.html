@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Spam Classifier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Custom glass effects */
+        .glass-light {
+            background: rgba(255, 255, 255, 0.3);
+            backdrop-filter: blur(16px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+        }
+        
+        .glass-dark {
+            background: rgba(17, 25, 40, 0.5);
+            backdrop-filter: blur(16px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+        
+        .glass-progress {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .glass-progress-fill {
+            background: linear-gradient(90deg, rgba(99, 102, 241, 0.8) 0%, rgba(168, 85, 247, 0.8) 100%);
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.6);
+        }
+        
+        .neon-indigo {
+            box-shadow: 0 0 10px rgba(99, 102, 241, 0.7), 0 0 20px rgba(99, 102, 241, 0.5);
+        }
+        
+        .neon-emerald {
+            box-shadow: 0 0 10px rgba(52, 211, 153, 0.7), 0 0 20px rgba(52, 211, 153, 0.5);
+        }
+        
+        .neon-pink {
+            box-shadow: 0 0 10px rgba(236, 72, 153, 0.7), 0 0 20px rgba(236, 72, 153, 0.5);
+        }
+        
+        .neon-blue {
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.7), 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+        
+        .file-upload {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .file-upload:hover {
+            border-color: rgba(99, 102, 241, 0.6);
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .file-upload.active {
+            border-color: rgba(16, 185, 129, 0.6);
+            background-color: rgba(236, 253, 245, 0.2);
+        }
+        
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .result-animation {
+            animation: fadeInUp 0.5s ease-in-out;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .scale-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .scale-hover:hover {
+            transform: scale(1.03);
+        }
+        
+        .dark-mode-transition {
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+        
+        .floating-btn {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            z-index: 50;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+        
+        .floating-btn-secondary {
+            position: fixed;
+            bottom: 2rem;
+            left: 2rem;
+            z-index: 50;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+        
+        @media (max-width: 768px) {
+            .floating-btn {
+                bottom: 1.5rem;
+                right: 1.5rem;
+            }
+            
+            .floating-btn-secondary {
+                bottom: 1.5rem;
+                left: 1.5rem;
+            }
+        }
+        
+        .btn-pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-50 to-blue-100 dark:from-gray-900 dark:to-gray-800 min-h-screen dark-mode-transition">
+    <!-- Dark Mode Toggle -->
+    <div class="fixed top-4 right-4 z-50">
+        <button id="dark-mode-toggle" class="glass-light dark:glass-dark rounded-full p-3 text-gray-700 dark:text-gray-200 hover:neon-indigo scale-hover">
+            <i class="fas fa-moon dark:hidden"></i>
+            <i class="fas fa-sun hidden dark:block"></i>
+        </button>
+    </div>
+
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Header -->
+        <header class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-indigo-700 dark:text-indigo-300 mb-2">PDF Spam Classifier</h1>
+            <p class="text-gray-600 dark:text-gray-300">Upload one or more PDFs to detect if they're spam or not</p>
+        </header>
+        
+        <!-- Stats Summary -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <div class="glass-light dark:glass-dark rounded-xl p-4 text-center scale-hover hover:neon-indigo">
+                <div class="text-3xl font-bold text-indigo-600 dark:text-indigo-400 mb-1" id="total-files">0</div>
+                <div class="text-sm text-gray-600 dark:text-gray-300">Total Files</div>
+            </div>
+            <div class="glass-light dark:glass-dark rounded-xl p-4 text-center scale-hover hover:neon-pink">
+                <div class="text-3xl font-bold text-pink-600 dark:text-pink-400 mb-1" id="spam-count">0</div>
+                <div class="text-sm text-gray-600 dark:text-gray-300">Spam Count</div>
+            </div>
+            <div class="glass-light dark:glass-dark rounded-xl p-4 text-center scale-hover hover:neon-emerald">
+                <div class="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mb-1" id="non-spam-count">0</div>
+                <div class="text-sm text-gray-600 dark:text-gray-300">Non-Spam Count</div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main>
+            <!-- Upload Section -->
+            <div class="glass-light dark:glass-dark rounded-xl overflow-hidden mb-8 scale-hover">
+                <div class="p-6">
+                    <h2 class="text-2xl font-semibold text-gray-800 dark:text-gray-200 mb-4">Upload PDF Files</h2>
+                    
+                    <div id="upload-container" class="file-upload">
+                        <i class="fas fa-file-pdf text-5xl text-red-500 mb-4"></i>
+                        <input type="file" id="pdf-upload" accept=".pdf" multiple class="hidden">
+                        <button id="upload-btn" class="glass-light dark:glass-dark text-gray-800 dark:text-gray-200 font-medium py-2 px-6 rounded-lg transition-all duration-300 hover:neon-indigo scale-hover">
+                            Select PDF Files
+                        </button>
+                        <p class="text-gray-500 dark:text-gray-400 mt-3">or drag and drop multiple files here</p>
+                        <p id="file-name" class="text-sm text-gray-500 dark:text-gray-400 mt-2 hidden"></p>
+                    </div>
+                    
+                    <div id="progress-container" class="mt-4 hidden">
+                        <div class="flex items-center">
+                            <div class="w-full glass-progress rounded-full h-3">
+                                <div id="progress-bar" class="glass-progress-fill h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                            <span id="progress-text" class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+                            
+            <!-- Results Section -->
+            <div id="results-container" class="hidden glass-light dark:glass-dark rounded-xl overflow-hidden mb-8">
+                <div class="p-6">
+                    <h2 class="text-2xl font-semibold text-gray-800 dark:text-gray-200 mb-4">Classification Results</h2>
+                    
+                    <div id="loading" class="flex flex-col items-center py-8">
+                        <div class="spinner text-indigo-600 dark:text-indigo-400 text-4xl mb-4">
+                            <i class="fas fa-circle-notch"></i>
+                        </div>
+                        <p class="text-gray-600 dark:text-gray-300">Analyzing your PDFs...</p>
+                    </div>
+                    
+                    <div id="results-content" class="hidden">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300">Batch Summary</h3>
+                            <div id="overall-result" class="px-4 py-2 rounded-full font-medium"></div>
+                        </div>
+
+                        <!-- Charts -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div class="glass-light dark:glass-dark p-4 rounded-xl scale-hover">
+                                <h4 class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Spam vs Non-Spam</h4>
+                                <canvas id="spamPieChart"></canvas>
+                            </div>
+                            <div class="glass-light dark:glass-dark p-4 rounded-xl scale-hover">
+                                <h4 class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">Spam Count per File</h4>
+                                <canvas id="spamBarChart"></canvas>
+                            </div>
+                        </div>
+                                                
+                        <div id="email-results" class="space-y-4"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Footer -->
+        <footer class="mt-12 text-center text-gray-500 dark:text-gray-400 text-sm">
+            <p>© 2025 PDF Spam Classifier. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <!-- Floating Action Button -->
+    <button id="fab" class="floating-btn glass-light dark:glass-dark text-gray-800 dark:text-gray-200 rounded-full p-4 hover:neon-indigo scale-hover transition-all">
+        <i class="fas fa-plus text-xl"></i>
+    </button>
+
+    <!-- Reset Button -->
+    <button id="reset-btn" class="floating-btn-secondary glass-light dark:glass-dark text-gray-800 dark:text-gray-200 rounded-full p-4 hover:neon-blue scale-hover btn-pulse">
+        <i class="fas fa-undo text-xl"></i>
+    </button>
+
+    <script>
+        let spamPieChart, spamBarChart;
+        let isDarkMode = false;
+        let progressInterval;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const darkModeToggle = document.getElementById('dark-mode-toggle');
+            const fab = document.getElementById('fab');
+            const resetBtn = document.getElementById('reset-btn');
+            const uploadBtn = document.getElementById('upload-btn');
+            const fileInput = document.getElementById('pdf-upload');
+            const uploadContainer = document.getElementById('upload-container');
+            const fileNameDisplay = document.getElementById('file-name');
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const resultsContainer = document.getElementById('results-container');
+            const loadingElement = document.getElementById('loading');
+            const resultsContent = document.getElementById('results-content');
+            const emailResults = document.getElementById('email-results');
+            const overallResult = document.getElementById('overall-result');
+            const totalFilesEl = document.getElementById('total-files');
+            const spamCountEl = document.getElementById('spam-count');
+            const nonSpamCountEl = document.getElementById('non-spam-count');
+            
+            // Reset functionality
+            resetBtn.addEventListener('click', () => {
+                resetAll();
+            });
+            
+            function resetAll() {
+                // Clear file input
+                fileInput.value = '';
+                
+                // Reset stats
+                totalFilesEl.textContent = '0';
+                spamCountEl.textContent = '0';
+                nonSpamCountEl.textContent = '0';
+                
+                // Hide file name and progress
+                fileNameDisplay.classList.add('hidden');
+                progressContainer.classList.add('hidden');
+                
+                // Clear progress bar
+                progressBar.style.width = '0%';
+                progressText.textContent = '0%';
+                
+                // Clear any active progress interval
+                if (progressInterval) {
+                    clearInterval(progressInterval);
+                }
+                
+                // Hide results
+                resultsContainer.classList.add('hidden');
+                resultsContent.classList.add('hidden');
+                loadingElement.classList.add('hidden');
+                
+                // Clear results content
+                emailResults.innerHTML = '';
+                overallResult.textContent = '';
+                overallResult.className = 'px-4 py-2 rounded-full font-medium';
+                
+                // Destroy charts if they exist
+                if (spamPieChart) {
+                    spamPieChart.destroy();
+                    spamPieChart = null;
+                }
+                
+                if (spamBarChart) {
+                    spamBarChart.destroy();
+                    spamBarChart = null;
+                }
+                
+                // Reset upload container style
+                uploadContainer.classList.remove('active');
+                
+                // Show the reset button animation again
+                resetBtn.classList.add('btn-pulse');
+            }
+
+            // Dark mode toggle
+            darkModeToggle.addEventListener('click', () => {
+                isDarkMode = !isDarkMode;
+                if (isDarkMode) {
+                    document.documentElement.classList.add('dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                }
+                
+                // Update charts if they exist
+                if (spamPieChart || spamBarChart) {
+                    updateChartColors();
+                }
+            });
+
+            // FAB functionality
+            fab.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            uploadContainer.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadContainer.classList.add('active');
+            });
+
+            uploadContainer.addEventListener('dragleave', () => {
+                uploadContainer.classList.remove('active');
+            });
+
+            uploadContainer.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadContainer.classList.remove('active');
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    handleFileUpload();
+                }
+            });
+                            
+            uploadBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleFileUpload);
+                            
+            function handleFileUpload() {
+                if (fileInput.files.length) {
+                    // Remove the reset button pulse animation
+                    resetBtn.classList.remove('btn-pulse');
+                    
+                    const files = Array.from(fileInput.files);
+                    if (files.some(f => f.type !== 'application/pdf')) {
+                        alert('Please upload only PDF files.');
+                        return;
+                    }
+                                        
+                    totalFilesEl.textContent = files.length;
+                    fileNameDisplay.textContent = files.map(f => f.name).join(", ");
+                    fileNameDisplay.classList.remove('hidden');
+                    progressContainer.classList.remove('hidden');
+                                                        
+                    let progress = 0;
+                    progressInterval = setInterval(() => {
+                        progress += Math.random() * 20;
+                        if (progress >= 100) {
+                            progress = 100;
+                            clearInterval(progressInterval);
+                            setTimeout(() => {
+                                resultsContainer.classList.remove('hidden');
+                                processPDFs(files);
+                            }, 500);
+                        }
+                        progressBar.style.width = `${progress}%`;
+                        progressText.textContent = `${Math.round(progress)}%`;
+                    }, 200);
+                }
+            }
+                            
+            function processPDFs(files) {
+                loadingElement.classList.remove('hidden');
+                resultsContent.classList.add('hidden');
+                const formData = new FormData();
+                files.forEach(file => formData.append("files", file));
+                fetch("http://127.0.0.1:5000/predict", {
+                    method: "POST",
+                    body: formData
+                })
+                .then(async response => {
+                    if (!response.ok) {
+                        const err = await response.json().catch(()=>({error:"Server error"}));
+                        throw new Error(err.error || "Server error");
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loadingElement.classList.add('hidden');
+                    resultsContent.classList.remove('hidden');
+                    displayResults(data);
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    loadingElement.classList.add('hidden');
+                    resultsContent.classList.remove('hidden');
+                    overallResult.textContent = "ERROR";
+                    overallResult.className = "px-4 py-2 rounded-full font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+                    emailResults.innerHTML = `<div class="glass-light dark:glass-dark p-4 rounded-xl border border-red-300 dark:border-red-700">Error: ${error.message}</div>`;
+                });
+            }
+                            
+            function displayResults(results) {
+                if (results.overall === 'SPAM') {
+                    overallResult.textContent = 'SPAM DETECTED in batch';
+                    overallResult.className = "px-4 py-2 rounded-full font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+                } else {
+                    overallResult.textContent = 'All Clear (Not Spam)';
+                    overallResult.className = "px-4 py-2 rounded-full font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+                }
+                                
+                // Update stats
+                const spamCount = results.emails.filter(e => e.is_spam).length;
+                const nonSpamCount = results.emails.length - spamCount;
+                                
+                spamCountEl.textContent = spamCount;
+                nonSpamCountEl.textContent = nonSpamCount;
+
+                const barLabels = [...new Set(results.emails.map(e => e.filename))];
+                const barData = barLabels.map(f =>
+                    results.emails.filter(e => e.filename === f && e.is_spam).length
+                );
+
+                // Pie chart
+                const pieCtx = document.getElementById('spamPieChart').getContext('2d');
+                if (spamPieChart) spamPieChart.destroy();
+                spamPieChart = new Chart(pieCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Spam', 'Non-Spam'],
+                        datasets: [{
+                            data: [spamCount, nonSpamCount],
+                            backgroundColor: ['#f87171', '#34d399'],
+                            borderColor: isDarkMode ? ['rgba(31, 41, 55, 0.8)', 'rgba(31, 41, 55, 0.8)'] : ['rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.8)'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    color: isDarkMode ? '#d1d5db' : '#4b5563'
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Bar chart
+                const barCtx = document.getElementById('spamBarChart').getContext('2d');
+                if (spamBarChart) spamBarChart.destroy();
+                spamBarChart = new Chart(barCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: barLabels,
+                        datasets: [{
+                            label: 'Spam Emails',
+                            data: barData,
+                            backgroundColor: '#f87171',
+                            borderColor: isDarkMode ? 'rgba(31, 41, 55, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    color: isDarkMode ? '#d1d5db' : '#4b5563'
+                                },
+                                grid: {
+                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+                                }
+                            },
+                            x: {
+                                ticks: {
+                                    color: isDarkMode ? '#d1d5db' : '#4b5563'
+                                },
+                                grid: {
+                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    color: isDarkMode ? '#d1d5db' : '#4b5563'
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Individual email results
+                emailResults.innerHTML = '';
+                results.emails.forEach((email, index) => {
+                    setTimeout(() => {
+                        const emailElement = document.createElement('div');
+                        emailElement.className = 'result-animation glass-light dark:glass-dark p-4 rounded-xl scale-hover';
+                        const confidencePercentage = Math.round(email.confidence * 100);
+
+                        let highlightedContent = email.content;
+                        if (email.suspicious_terms && email.suspicious_terms.length > 0) {
+                            email.suspicious_terms.forEach(term => {
+                                const regex = new RegExp(`(${term})`, "gi");
+                                highlightedContent = highlightedContent.replace(
+                                    regex,
+                                    `<mark class="bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-200 font-semibold">$1</mark>`
+                                );
+                            });
+                        }
+
+                        emailElement.innerHTML = `
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <h4 class="font-medium text-gray-800 dark:text-gray-200">${email.subject}</h4>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400">File: <span class="font-medium">${email.filename}</span></p>
+                                </div>
+                                <span class="px-3 py-1 rounded-full text-xs font-medium ${email.is_spam ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'}">
+                                    ${email.is_spam ? 'SPAM' : 'Not Spam'} (${confidencePercentage}%)
+                                </span>
+                            </div>
+                            <p class="text-gray-600 dark:text-gray-300 text-sm mb-3">${highlightedContent}</p>
+                            ${email.suspicious_terms && email.suspicious_terms.length > 0 ? `
+                            <div class="mb-2 text-sm">
+                                <span class="font-medium text-gray-700 dark:text-gray-300">Suspicious terms:</span>
+                                <span class="text-red-600 dark:text-red-400">${email.suspicious_terms.join(", ")}</span>
+                            </div>` : ''}
+                        `;
+                        emailResults.appendChild(emailElement);
+                    }, index * 100);
+                });
+            }
+            
+            function updateChartColors() {
+                if (spamPieChart) {
+                    spamPieChart.data.datasets[0].borderColor = isDarkMode ? 
+                        ['rgba(31, 41, 55, 0.8)', 'rgba(31, 41, 55, 0.8)'] : 
+                        ['rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.8)'];
+                    
+                    spamPieChart.options.plugins.legend.labels.color = isDarkMode ? '#d1d5db' : '#4b5563';
+                    spamPieChart.update();
+                }
+                
+                if (spamBarChart) {
+                    spamBarChart.data.datasets[0].borderColor = isDarkMode ? 
+                        'rgba(31, 41, 55, 0.8)' : 
+                        'rgba(255, 255, 255, 0.8)';
+                    
+                    spamBarChart.options.scales.y.ticks.color = isDarkMode ? '#d1d5db' : '#4b5563';
+                    spamBarChart.options.scales.y.grid.color = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+                    
+                    spamBarChart.options.scales.x.ticks.color = isDarkMode ? '#d1d5db' : '#4b5563';
+                    spamBarChart.options.scales.x.grid.color = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+                    
+                    spamBarChart.options.plugins.legend.labels.color = isDarkMode ? '#d1d5db' : '#4b5563';
+                    spamBarChart.update();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+
+
